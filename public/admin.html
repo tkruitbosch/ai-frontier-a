@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Frontier — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#040a15;--panel:#080f1e;--card:#0c1525;--border:#162038;--border2:#1e3050;
+  --cyan:#00d4ff;--blue:#0095ff;--amber:#ff9500;--green:#00e87a;--red:#ff4455;--purple:#a855f7;
+  --text:#b8cce4;--muted:#3a5070;
+  --data:#3b82f6;--human:#f59e0b;--compute:#10b981;--trust:#ef4444;--innovation:#a855f7;
+}
+html,body{height:100%;background:var(--bg);font-family:'Exo 2',sans-serif;color:var(--text);}
+
+.layout{display:grid;grid-template-columns:300px 1fr 280px;grid-template-rows:52px 1fr;height:100vh;gap:0;}
+
+/* ── TOPBAR ── */
+.topbar{grid-column:1/-1;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:20px;padding:0 24px;}
+.brand{font-size:20px;font-weight:900;letter-spacing:3px;color:#fff;margin-right:8px;}
+.brand span{color:var(--cyan);}
+.admin-chip{background:rgba(255,149,0,0.15);border:1px solid rgba(255,149,0,0.35);border-radius:20px;padding:3px 12px;font-size:10px;font-weight:800;color:var(--amber);letter-spacing:3px;text-transform:uppercase;}
+.phase-info{flex:1;display:flex;gap:12px;align-items:center;}
+.info-badge{background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.25);border-radius:12px;padding:3px 12px;font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:2px;}
+
+/* ── PANELS ── */
+.left-panel{background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;padding:16px;}
+.center-panel{overflow-y:auto;padding:20px;background:var(--bg);}
+.right-panel{background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+
+/* ── SECTION HEADERS ── */
+.sec-hdr{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+
+/* ── CONTROL BUTTONS ── */
+.ctrl-btn{border:none;border-radius:12px;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:800;font-size:13px;letter-spacing:1px;padding:12px 16px;transition:all .2s;width:100%;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:10px;justify-content:center;}
+.ctrl-btn:active{transform:scale(0.97);}
+.ctrl-btn.primary{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#fff;}
+.ctrl-btn.success{background:linear-gradient(135deg,#065f46,var(--green));color:#fff;}
+.ctrl-btn.warning{background:linear-gradient(135deg,#92400e,var(--amber));color:#fff;}
+.ctrl-btn.danger{background:linear-gradient(135deg,#7f1d1d,var(--red));color:#fff;}
+.ctrl-btn.ghost{background:rgba(255,255,255,0.04);border:1px solid var(--border2);color:var(--text);}
+.ctrl-btn:disabled{opacity:0.35;cursor:not-allowed;transform:none !important;}
+
+/* ── DICE DISPLAY ── */
+.dice-section{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:16px;margin-bottom:12px;text-align:center;}
+.dice-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;}
+.die{width:54px;height:54px;border-radius:12px;background:rgba(0,0,0,0.5);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:700;color:#fff;transition:all .3s;}
+.die.glow{border-color:var(--cyan);box-shadow:0 0 16px rgba(0,212,255,0.4);color:var(--cyan);}
+.dice-total{font-family:'Share Tech Mono',monospace;font-size:48px;color:var(--cyan);font-weight:700;}
+.dice-sub{font-size:10px;color:var(--muted);letter-spacing:2px;font-weight:700;text-transform:uppercase;}
+
+/* ── PLAYER ROWS ── */
+.player-row{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;transition:border-color .2s;}
+.player-row:hover{border-color:var(--border2);}
+.pr-top{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.pr-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.pr-name{flex:1;font-size:14px;font-weight:800;color:#fff;}
+.pr-vp{font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--amber);}
+.pr-vp span{font-size:10px;color:var(--muted);font-family:'Exo 2',sans-serif;}
+.pr-res{display:flex;gap:6px;flex-wrap:wrap;}
+.pr-chip{display:flex;align-items:center;gap:3px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;}
+.pr-dot2{width:6px;height:6px;border-radius:50%;}
+.pr-bar-wrap{height:3px;background:rgba(255,255,255,0.05);border-radius:3px;margin:6px 0;}
+.pr-bar{height:100%;border-radius:3px;transition:width .8s;}
+.pr-actions{display:flex;gap:6px;margin-top:8px;}
+.pr-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:rgba(0,232,122,0.12);color:var(--green);border:1px solid rgba(0,232,122,0.25);}
+
+/* ── ADD PLAYER FORM ── */
+.add-player-form{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;}
+.form-row{display:flex;gap:8px;margin-bottom:10px;flex-direction:column;}
+input,select{background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:10px;color:#fff;font-family:'Exo 2',sans-serif;font-size:13px;font-weight:600;padding:10px 12px;outline:none;transition:border-color .2s;-webkit-appearance:none;}
+input:focus,select:focus{border-color:var(--cyan);}
+
+/* ── DISRUPTION CARDS ── */
+.disrupt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.disrupt-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:all .2s;border:1px solid var(--border);}
+.disrupt-card:hover{border-color:rgba(255,68,85,0.4);background:rgba(255,68,85,0.06);}
+.disrupt-card.selected{border-color:rgba(255,68,85,0.6);background:rgba(255,68,85,0.1);}
+.dc-emoji{font-size:22px;display:block;margin-bottom:5px;}
+.dc-name{font-size:11px;font-weight:800;color:#fff;margin-bottom:3px;}
+.dc-desc{font-size:9px;color:var(--muted);line-height:1.3;}
+
+/* ── ACTION WINDOW ── */
+.aw-status{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;text-align:center;}
+.aw-status.open{border-color:rgba(0,232,122,0.3);background:rgba(0,232,122,0.04);}
+.aw-status.closed{border-color:var(--border);}
+.aw-title{font-size:14px;font-weight:800;color:#fff;margin-bottom:4px;}
+.aw-timer{font-family:'Share Tech Mono',monospace;font-size:36px;color:var(--amber);margin:6px 0;}
+.aw-sub{font-size:10px;color:var(--muted);letter-spacing:1px;}
+.duration-row{display:flex;gap:8px;margin-bottom:10px;}
+.dur-btn{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:700;padding:8px 4px;text-align:center;transition:all .2s;}
+.dur-btn.active{border-color:var(--cyan);background:rgba(0,212,255,0.1);color:var(--cyan);}
+
+/* ── LOG ── */
+.log-entry{font-size:10px;font-weight:600;color:var(--text);padding:5px 8px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2px solid var(--border2);line-height:1.4;margin-bottom:4px;}
+.log-entry.fresh{border-left-color:var(--cyan);color:#fff;}
+.log-time{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-right:4px;}
+
+/* ── SCOREBOARD ── */
+.score-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border-radius:10px;margin-bottom:6px;}
+.sr-rank{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);width:18px;}
+.sr-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.sr-name{flex:1;font-size:12px;font-weight:700;color:#fff;}
+.sr-vp{font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--amber);}
+.sr-bar-wrap{height:2px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:4px;}
+.sr-bar{height:100%;border-radius:2px;transition:width .8s;}
+
+/* ── QR CODE ── */
+.qr-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;}
+.qr-url{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);margin-top:8px;word-break:break-all;}
+
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:1000;}
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="brand">AI <span>FRONTIER</span></div>
+    <div class="admin-chip">Facilitator</div>
+    <div class="phase-info">
+      <div class="info-badge" id="tbar-round">LOBBY</div>
+      <div class="info-badge" id="tbar-phase">WAITING</div>
+      <div class="info-badge" id="tbar-players">0 COMPANIES</div>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL: Players -->
+  <div class="left-panel">
+    <div class="sec-hdr">Companies</div>
+    <div class="add-player-form">
+      <div class="sec-hdr" style="border:none;margin-bottom:8px">Add Company</div>
+      <div class="form-row">
+        <input id="ap-name" type="text" placeholder="Company name" maxlength="28">
+        <select id="ap-arch">
+          <option value="enterprise">🏦 Enterprise Giant</option>
+          <option value="disruptor">🚀 Tech Disruptor</option>
+          <option value="regulated">🛡️ Regulated Player</option>
+          <option value="talent">🧠 Talent House</option>
+          <option value="infra">☁️ Infrastructure Spec.</option>
+          <option value="pioneer">📊 Data Pioneer</option>
+        </select>
+      </div>
+      <button class="ctrl-btn primary" id="add-player-btn">+ Add Company</button>
+    </div>
+    <div id="players-list"></div>
+  </div>
+
+  <!-- CENTER PANEL -->
+  <div class="center-panel">
+
+    <!-- Game Controls -->
+    <div class="sec-hdr">Game Controls</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <button class="ctrl-btn success" id="btn-start">▶ Start Game</button>
+      <button class="ctrl-btn ghost" id="btn-reset">↺ Reset</button>
+    </div>
+
+    <!-- Dice -->
+    <div class="dice-section">
+      <div class="dice-row">
+        <div class="die" id="die1">?</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--muted)">+</div>
+        <div class="die" id="die2">?</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--muted)">=</div>
+        <div class="dice-total" id="dice-total">—</div>
+      </div>
+      <div class="dice-sub" id="dice-sub">Roll to distribute resources</div>
+      <button class="ctrl-btn warning" id="btn-roll" style="margin-top:12px;margin-bottom:0;">🎲 Roll Dice</button>
+    </div>
+
+    <!-- Action Window -->
+    <div class="sec-hdr">Action Window</div>
+    <div class="aw-status" id="aw-status">
+      <div class="aw-title">Window Closed</div>
+      <div class="aw-sub">Open when players should act</div>
+    </div>
+    <div class="sec-hdr" style="margin-top:0">Duration</div>
+    <div class="duration-row" id="duration-row">
+      <div class="dur-btn" data-dur="60">60s</div>
+      <div class="dur-btn active" data-dur="90">90s</div>
+      <div class="dur-btn" data-dur="120">2 min</div>
+      <div class="dur-btn" data-dur="180">3 min</div>
+    </div>
+    <button class="ctrl-btn success" id="btn-open">⚡ Open Action Window</button>
+    <button class="ctrl-btn danger" id="btn-close" style="display:none">✅ Close & Resolve</button>
+
+    <!-- Disruption -->
+    <div class="sec-hdr" style="margin-top:16px">Disruption Cards</div>
+    <div class="disrupt-grid" id="disrupt-grid"></div>
+    <button class="ctrl-btn danger" id="btn-disrupt">⚡ Trigger Disruption</button>
+
+    <!-- QR Code section -->
+    <div class="sec-hdr" style="margin-top:16px">Player Join Link</div>
+    <div class="qr-section">
+      <canvas id="qr-canvas" style="max-width:140px;border-radius:8px;"></canvas>
+      <div class="qr-url" id="qr-url"></div>
+    </div>
+    <div style="margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
+      <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Board Display (big screen)</div>
+      <div class="qr-url" id="board-url" style="font-size:11px"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Scoreboard + Log -->
+  <div class="right-panel">
+    <div>
+      <div class="sec-hdr">Scoreboard</div>
+      <div id="scoreboard"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;">
+      <div class="sec-hdr">Activity Feed</div>
+      <div id="log-list" style="flex:1;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const RES_META={
+  data:{label:'Data',color:'#3b82f6'},human:{label:'Human',color:'#f59e0b'},
+  compute:{label:'Compute',color:'#10b981'},trust:{label:'Trust',color:'#ef4444'},
+  innovation:{label:'Innov',color:'#a855f7'},
+};
+
+const DISRUPTION_CARDS=[
+  {id:'regulatory',name:'Regulatory Crackdown',emoji:'⚠️',desc:'All lose 1 Trust Token'},
+  {id:'talent_war',name:'AI Talent War',       emoji:'🧠',desc:'All lose 1 Human Capital'},
+  {id:'outage',    name:'Cloud Outage',        emoji:'☁️',desc:'All lose 1 Compute Credit'},
+  {id:'breach',    name:'Data Breach',         emoji:'🔓',desc:'All lose 2 Data Capital'},
+  {id:'gold_rush', name:'AI Gold Rush',        emoji:'🏆',desc:'All gain +2 Innovation'},
+  {id:'mandate',   name:'AI Mandate',          emoji:'📋',desc:'All gain +2 Trust'},
+];
+
+let gameState=null;
+let selectedDisrupt=null;
+let selectedDuration=90;
+let timerInterval=null;
+let lastLogCount=0;
+
+// ── DURATION BUTTONS ──
+document.querySelectorAll('.dur-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.dur-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); selectedDuration=parseInt(btn.dataset.dur);
+  });
+});
+
+// ── DISRUPTION CARDS ──
+const dg=document.getElementById('disrupt-grid');
+DISRUPTION_CARDS.forEach(c=>{
+  const el=document.createElement('div');
+  el.className='disrupt-card';
+  el.dataset.id=c.id;
+  el.innerHTML=`<span class="dc-emoji">${c.emoji}</span><div class="dc-name">${c.name}</div><div class="dc-desc">${c.desc}</div>`;
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.disrupt-card').forEach(d=>d.classList.remove('selected'));
+    el.classList.add('selected'); selectedDisrupt=c.id;
+  });
+  dg.appendChild(el);
+});
+
+// ── ADD PLAYER ──
+document.getElementById('add-player-btn').addEventListener('click',()=>{
+  const company=document.getElementById('ap-name').value.trim();
+  if(!company) return;
+  const archetype=document.getElementById('ap-arch').value;
+  socket.emit('admin:add_player',{company,archetype});
+  document.getElementById('ap-name').value='';
+});
+
+// ── GAME CONTROLS ──
+document.getElementById('btn-start').addEventListener('click',()=>{ if(confirm('Start the game?')) socket.emit('admin:start'); });
+document.getElementById('btn-reset').addEventListener('click',()=>{ if(confirm('Reset the entire game? This cannot be undone.')) socket.emit('admin:reset'); });
+document.getElementById('btn-roll').addEventListener('click',()=>socket.emit('admin:roll'));
+document.getElementById('btn-open').addEventListener('click',()=>socket.emit('admin:open_actions',{duration:selectedDuration}));
+document.getElementById('btn-close').addEventListener('click',()=>socket.emit('admin:close_actions'));
+document.getElementById('btn-disrupt').addEventListener('click',()=>{
+  if(!selectedDisrupt){alert('Select a disruption card first.');return;}
+  socket.emit('admin:disrupt',{cardId:selectedDisrupt});
+});
+
+// ── RENDER PLAYERS ──
+function renderPlayers(s){
+  const list=document.getElementById('players-list');
+  list.innerHTML='';
+  Object.values(s.players).sort((a,b)=>b.vp-a.vp).forEach(p=>{
+    const el=document.createElement('div');
+    el.className='player-row';
+    const resHtml=Object.entries(RES_META).map(([k,m])=>`<div class="pr-chip"><div class="pr-dot2" style="background:${m.color}"></div><span style="color:${m.color}">${p.resources[k]||0}</span></div>`).join('');
+    const cardBadge=p.cards.length?`<span style="font-size:10px;color:var(--purple);font-weight:700">🃏 ${p.cards.length}</span>`:'';
+    el.innerHTML=`
+      <div class="pr-top">
+        <div class="pr-dot" style="background:${p.color};box-shadow:0 0 8px ${p.color}88"></div>
+        <div class="pr-name">${p.company}</div>
+        ${cardBadge}
+        <div class="pr-vp">${p.vp}<span> VP</span></div>
+      </div>
+      <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.min(100,(p.vp/(s.winVP||10))*100)}%;background:${p.color}"></div></div>
+      <div class="pr-res">${resHtml}</div>
+      <div class="pr-actions">
+        <span style="font-size:9px;color:var(--muted)">${p.posture?.toUpperCase()||''}</span>
+        <button onclick="removePlayer('${p.id}')" style="margin-left:auto;background:rgba(255,68,85,0.1);border:1px solid rgba(255,68,85,0.3);border-radius:6px;color:var(--red);cursor:pointer;font-family:'Exo 2',sans-serif;font-size:9px;font-weight:700;padding:3px 8px">Remove</button>
+      </div>`;
+    list.appendChild(el);
+  });
+}
+
+function removePlayer(pid){ socket.emit('admin:remove_player',{pid}); }
+
+// ── SCOREBOARD ──
+function renderScoreboard(s){
+  const sb=document.getElementById('scoreboard');
+  sb.innerHTML='';
+  Object.values(s.players).sort((a,b)=>b.vp-a.vp).forEach((p,i)=>{
+    sb.innerHTML+=`
+      <div class="score-row">
+        <div class="sr-rank">${i+1}</div>
+        <div class="sr-dot" style="background:${p.color}"></div>
+        <div>
+          <div class="sr-name">${p.company}</div>
+          <div class="sr-bar-wrap"><div class="sr-bar" style="width:${Math.min(100,(p.vp/(s.winVP||10))*100)}%;background:${p.color}"></div></div>
+        </div>
+        <div class="sr-vp">${p.vp}</div>
+      </div>`;
+  });
+}
+
+// ── LOG ──
+function renderLog(s){
+  if(s.log.length===lastLogCount) return;
+  lastLogCount=s.log.length;
+  const list=document.getElementById('log-list'); list.innerHTML='';
+  [...s.log].reverse().forEach((entry,i)=>{
+    const d=new Date(entry.t),time=`${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    const el=document.createElement('div');
+    el.className='log-entry'+(i===0?' fresh':'');
+    el.innerHTML=`<span class="log-time">${time}</span>${entry.msg}`;
+    list.appendChild(el);
+  });
+}
+
+// ── HEADER ──
+function updateHeader(s){
+  document.getElementById('tbar-round').textContent=s.phase==='playing'?`ROUND ${s.round}`:s.phase.toUpperCase();
+  document.getElementById('tbar-phase').textContent=s.actionOpen?'ACTIONS OPEN':'RESOLVING';
+  document.getElementById('tbar-players').textContent=`${s.playerCount} COMPAN${s.playerCount===1?'Y':'IES'}`;
+}
+
+// ── ACTION WINDOW ──
+function updateActionWindow(s){
+  const box=document.getElementById('aw-status');
+  const btnOpen=document.getElementById('btn-open');
+  const btnClose=document.getElementById('btn-close');
+  clearInterval(timerInterval);
+  if(s.actionOpen&&s.actionEnd){
+    box.className='aw-status open';
+    btnOpen.style.display='none'; btnClose.style.display='block';
+    timerInterval=setInterval(()=>{
+      const rem=Math.max(0,Math.ceil((s.actionEnd-Date.now())/1000));
+      box.innerHTML=`<div class="aw-title">⚡ Window OPEN</div><div class="aw-timer" style="color:${rem<15?'var(--red)':rem<30?'var(--amber)':'var(--green)'}">${rem}s</div><div class="aw-sub">${s.submittedCount}/${s.playerCount} submitted</div>`;
+      if(rem===0){clearInterval(timerInterval);}
+    },500);
+  } else {
+    box.className='aw-status closed';
+    box.innerHTML=`<div class="aw-title">Window Closed</div><div class="aw-sub">Open when players should act</div>`;
+    btnOpen.style.display='block'; btnClose.style.display='none';
+  }
+}
+
+// ── DICE ──
+function renderDice(s){
+  if(!s.diceResult) return;
+  document.getElementById('die1').textContent=s.dice[0]||'?';
+  document.getElementById('die2').textContent=s.dice[1]||'?';
+  document.getElementById('dice-total').textContent=s.diceResult;
+  const cnt=s.activatedHexes?.length||0;
+  document.getElementById('dice-sub').textContent=cnt?`${cnt} hex${cnt>1?'es':''} activated this roll`:'No hexes matched';
+  document.getElementById('die1').classList.add('glow');
+  document.getElementById('die2').classList.add('glow');
+}
+
+// ── QR / URL ──
+function setupQR(){
+  fetch('/api/info').then(r=>r.json()).then(info=>{
+    const url=`http://${info.ip}:${info.port}/`;
+    const boardUrl=`http://localhost:${info.port}/board`;
+    document.getElementById('qr-url').textContent=url;
+    const boardEl=document.getElementById('board-url'); if(boardEl) boardEl.textContent=boardUrl;
+    if(window.QRCode){
+      new QRCode(document.getElementById('qr-canvas'),{text:url,width:140,height:140,colorDark:'#00d4ff',colorLight:'#0c1525'});
+    }
+  }).catch(()=>{});
+}
+
+// ── SOCKET ──
+const socket=io({query:{role:'admin'}});
+
+socket.on('state',s=>{
+  gameState=s;
+  renderPlayers(s);
+  renderScoreboard(s);
+  renderLog(s);
+  updateHeader(s);
+  updateActionWindow(s);
+  renderDice(s);
+});
+
+socket.on('dice_rolled',({dice,result})=>{
+  const d1=document.getElementById('die1'),d2=document.getElementById('die2'),dt=document.getElementById('dice-total');
+  let c=0; const iv=setInterval(()=>{
+    d1.textContent=Math.ceil(Math.random()*6); d2.textContent=Math.ceil(Math.random()*6); c++;
+    if(c>8){ clearInterval(iv); d1.textContent=dice[0]; d2.textContent=dice[1]; dt.textContent=result; d1.classList.add('glow'); d2.classList.add('glow'); }
+  },80);
+});
+
+socket.on('game_over',({winner})=>{
+  alert(`🏆 GAME OVER!\n${winner.company} wins with ${winner.vp} Victory Points!`);
+});
+
+setupQR();
+</script>
+</body>
+</html>

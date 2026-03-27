@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Frontier — Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --bg:#060c1a; --panel:#0b1424; --border:#162038; --border2:#1e3050;
+  --blue:#0095ff; --cyan:#00d4ff; --amber:#ff9500; --green:#00e87a;
+  --purple:#a855f7; --red:#ff4455; --text:#b8cce4; --muted:#3a5070;
+  --data:#3b82f6; --human:#f59e0b; --compute:#10b981; --trust:#ef4444; --innovation:#a855f7;
+}
+html,body { width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:'Exo 2',sans-serif; color:var(--text); }
+
+/* ── LAYOUT ── */
+#root { display:flex; height:100vh; }
+#left  { width:280px; min-width:280px; border-right:1px solid var(--border); display:flex; flex-direction:column; }
+#center{ flex:1; display:flex; flex-direction:column; overflow:hidden; }
+#right { width:260px; min-width:260px; border-left:1px solid var(--border); display:flex; flex-direction:column; }
+
+/* ── TOP BAR ── */
+#topbar { height:52px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; flex-shrink:0; background:rgba(6,12,26,0.95); }
+.brand { font-size:22px; font-weight:900; letter-spacing:3px; color:#fff; }
+.brand span { color:var(--cyan); }
+.round-info { display:flex; align-items:center; gap:16px; }
+.round-badge { background:rgba(0,148,255,0.12); border:1px solid rgba(0,148,255,0.3); border-radius:20px; padding:4px 14px; font-size:12px; font-weight:700; color:var(--cyan); letter-spacing:2px; }
+.phase-badge { background:rgba(0,232,122,0.1); border:1px solid rgba(0,232,122,0.25); border-radius:20px; padding:4px 14px; font-size:11px; font-weight:700; color:var(--green); letter-spacing:2px; text-transform:uppercase; }
+
+/* ── BOARD AREA ── */
+#board-wrap { flex:1; display:flex; align-items:center; justify-content:center; padding:12px; position:relative; overflow:hidden; }
+#board-wrap::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,148,255,0.04) 0%, transparent 70%); pointer-events:none; }
+#board { width:100%; height:100%; }
+
+/* ── DICE STRIP ── */
+#dice-strip { height:70px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:center; gap:24px; flex-shrink:0; background:rgba(6,12,26,0.8); }
+.die { width:44px; height:44px; border-radius:10px; background:var(--panel); border:2px solid var(--border2); display:flex; align-items:center; justify-content:center; font-family:'Share Tech Mono',monospace; font-size:26px; font-weight:700; color:#fff; transition:all 0.4s; }
+.die.rolling { animation:dieRoll 0.6s ease-in-out; }
+.die.active { border-color:var(--cyan); box-shadow:0 0 20px rgba(0,212,255,0.4); color:var(--cyan); }
+@keyframes dieRoll { 0%,100%{transform:rotate(0)} 25%{transform:rotate(-15deg) scale(1.1)} 75%{transform:rotate(15deg) scale(1.1)} }
+.dice-result { font-family:'Share Tech Mono',monospace; font-size:32px; color:var(--cyan); min-width:60px; text-align:center; }
+.dice-label { font-size:11px; color:var(--muted); letter-spacing:2px; font-weight:700; }
+.dice-activated { font-size:12px; color:var(--amber); font-weight:700; }
+
+/* ── LEFT PANEL ── */
+#left-header { padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+#left-header h3 { font-size:10px; font-weight:700; color:var(--muted); letter-spacing:3px; text-transform:uppercase; }
+#players-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+#players-list::-webkit-scrollbar { width:4px; }
+#players-list::-webkit-scrollbar-track { background:transparent; }
+#players-list::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
+
+.player-card { background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:12px; transition:border-color 0.3s; }
+.player-card.leader { border-color:rgba(255,149,0,0.4); }
+.pc-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.pc-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+.pc-name { flex:1; font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pc-posture { font-size:10px; font-weight:700; color:var(--muted); }
+.pc-vp { font-family:'Share Tech Mono',monospace; font-size:22px; color:var(--amber); line-height:1; }
+.pc-vp span { font-size:11px; color:var(--muted); font-family:'Exo 2',sans-serif; }
+.pc-res { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+.pc-res-item { display:flex; align-items:center; gap:3px; font-family:'Share Tech Mono',monospace; font-size:11px; font-weight:700; }
+.res-dot { width:7px; height:7px; border-radius:50%; }
+.vp-bar-wrap { height:3px; background:rgba(255,255,255,0.06); border-radius:3px; margin-top:8px; }
+.vp-bar { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--cyan),var(--blue)); transition:width 1s cubic-bezier(.34,1.4,.64,1); }
+.submitted-badge { display:inline-block; background:rgba(0,232,122,0.15); border:1px solid rgba(0,232,122,0.3); border-radius:10px; padding:1px 7px; font-size:9px; font-weight:700; color:var(--green); letter-spacing:1px; margin-top:4px; }
+
+/* ── LEGEND ── */
+#legend { border-top:1px solid var(--border); padding:12px 16px; flex-shrink:0; }
+#legend h4 { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:3px; text-transform:uppercase; margin-bottom:8px; }
+.legend-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+.legend-item { display:flex; align-items:center; gap:6px; }
+.legend-hex { width:14px; height:14px; border-radius:3px; }
+.legend-label { font-size:10px; font-weight:600; color:var(--text); }
+
+/* ── RIGHT PANEL ── */
+#log-header { padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+#log-header h3 { font-size:10px; font-weight:700; color:var(--muted); letter-spacing:3px; text-transform:uppercase; }
+#log-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
+#log-list::-webkit-scrollbar { width:4px; }
+#log-list::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
+.log-entry { font-size:11px; font-weight:600; color:var(--text); padding:6px 10px; background:rgba(255,255,255,0.025); border-radius:8px; border-left:2px solid var(--border2); line-height:1.4; }
+.log-entry.new { border-left-color:var(--cyan); color:#fff; }
+.log-time { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); margin-right:6px; }
+
+/* ── STATUS PANEL ── */
+#status-panel { border-top:1px solid var(--border); padding:12px 16px; flex-shrink:0; }
+.status-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.status-label { font-size:10px; font-weight:700; color:var(--muted); letter-spacing:2px; text-transform:uppercase; }
+.status-val { font-family:'Share Tech Mono',monospace; font-size:14px; font-weight:700; color:var(--cyan); }
+.action-timer { background:rgba(255,149,0,0.1); border:1px solid rgba(255,149,0,0.3); border-radius:8px; padding:8px 12px; text-align:center; }
+.timer-val { font-family:'Share Tech Mono',monospace; font-size:28px; color:var(--amber); }
+.timer-label { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+
+/* ── SVG STYLES ── */
+.hex-glow { filter:drop-shadow(0 0 8px currentColor); }
+.player-position { cursor:pointer; }
+
+/* ── WIN SCREEN ── */
+#win-screen { position:fixed; inset:0; z-index:200; background:rgba(6,12,26,0.95); display:none; align-items:center; justify-content:center; flex-direction:column; text-align:center; }
+#win-screen.show { display:flex; }
+.win-glow { font-size:80px; margin-bottom:16px; animation:winPop 0.6s cubic-bezier(.34,1.56,.64,1); }
+.win-title { font-size:14px; font-weight:700; letter-spacing:6px; color:var(--cyan); text-transform:uppercase; margin-bottom:8px; animation:winPop 0.6s 0.1s cubic-bezier(.34,1.56,.64,1) both; }
+.win-company { font-size:52px; font-weight:900; color:#fff; margin-bottom:12px; animation:winPop 0.6s 0.2s cubic-bezier(.34,1.56,.64,1) both; }
+.win-vp { font-family:'Share Tech Mono',monospace; font-size:72px; color:var(--amber); line-height:1; animation:winPop 0.6s 0.3s cubic-bezier(.34,1.56,.64,1) both; }
+.win-vp-lbl { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:4px; text-transform:uppercase; margin-bottom:32px; animation:winPop 0.6s 0.35s cubic-bezier(.34,1.56,.64,1) both; }
+.win-scores { display:flex; flex-direction:column; gap:8px; width:320px; animation:winPop 0.6s 0.4s cubic-bezier(.34,1.56,.64,1) both; }
+.win-score-row { display:flex; align-items:center; gap:12px; background:rgba(255,255,255,0.05); border-radius:10px; padding:10px 16px; }
+.win-score-dot { width:12px; height:12px; border-radius:50%; }
+.win-score-name { flex:1; font-size:14px; font-weight:700; color:var(--text); text-align:left; }
+.win-score-vp { font-family:'Share Tech Mono',monospace; font-size:20px; color:var(--amber); }
+@keyframes winPop { from{transform:scale(0.5) translateY(20px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
+
+/* ── DISRUPTION TOAST ── */
+#disruption-toast { position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-20px); background:linear-gradient(135deg,#3d0010,#1a0005); border:1px solid rgba(255,68,85,0.5); border-radius:16px; padding:16px 28px; text-align:center; opacity:0; pointer-events:none; transition:all 0.4s; z-index:100; }
+#disruption-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+.dt-emoji { font-size:32px; margin-bottom:6px; }
+.dt-title { font-size:16px; font-weight:900; color:#ff4455; margin-bottom:4px; }
+.dt-desc { font-size:12px; color:rgba(255,180,180,0.8); }
+
+/* ── SCANLINE ── */
+body::after { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px); pointer-events:none; z-index:1000; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="left">
+    <div id="left-header"><h3>Companies</h3></div>
+    <div id="players-list"></div>
+    <div id="legend">
+      <h4>Resource Map</h4>
+      <div class="legend-grid" id="legend-grid"></div>
+    </div>
+  </div>
+
+  <div id="center">
+    <div id="topbar">
+      <div class="brand">AI <span>FRONTIER</span></div>
+      <div class="round-info">
+        <div class="round-badge" id="round-badge">LOBBY</div>
+        <div class="phase-badge" id="phase-badge">WAITING</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;" id="player-count">0 COMPANIES</div>
+    </div>
+    <div id="board-wrap">
+      <svg id="board" viewBox="250 160 500 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow-soft" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-med" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-bright" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-coe" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="12" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <!-- Resource radial gradients -->
+          <radialGradient id="rg-data" cx="50%" cy="35%"><stop offset="0%" stop-color="#1d3a80"/><stop offset="100%" stop-color="#0a1530"/></radialGradient>
+          <radialGradient id="rg-human" cx="50%" cy="35%"><stop offset="0%" stop-color="#6b3a00"/><stop offset="100%" stop-color="#1a0e00"/></radialGradient>
+          <radialGradient id="rg-compute" cx="50%" cy="35%"><stop offset="0%" stop-color="#0a4030"/><stop offset="100%" stop-color="#051510"/></radialGradient>
+          <radialGradient id="rg-trust" cx="50%" cy="35%"><stop offset="0%" stop-color="#5a1020"/><stop offset="100%" stop-color="#180508"/></radialGradient>
+          <radialGradient id="rg-innovation" cx="50%" cy="35%"><stop offset="0%" stop-color="#40186a"/><stop offset="100%" stop-color="#130820"/></radialGradient>
+          <radialGradient id="rg-neutral" cx="50%" cy="35%"><stop offset="0%" stop-color="#1e2a3a"/><stop offset="100%" stop-color="#0a0f18"/></radialGradient>
+          <!-- Activated pulse overlay -->
+          <radialGradient id="rg-activated" cx="50%" cy="50%"><stop offset="0%" stop-color="rgba(255,255,255,0.15)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient>
+        </defs>
+        <g id="bg-hexes"></g>
+        <g id="hex-layer"></g>
+        <g id="edge-layer"></g>
+        <g id="reach-layer"></g>
+        <g id="id-layer"></g>
+        <g id="vert-layer"></g>
+        <g id="number-layer"></g>
+        <g id="label-layer"></g>
+      </svg>
+    </div>
+    <div id="dice-strip">
+      <div class="dice-label">ROUND DICE</div>
+      <div class="die" id="die1">?</div>
+      <div class="dice-result" id="dice-result">—</div>
+      <div class="die" id="die2">?</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div class="dice-activated" id="dice-activated"></div>
+        <div class="dice-label">ACTIVATED</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="right">
+    <div id="log-header"><h3>Activity Feed</h3></div>
+    <div id="log-list"></div>
+    <div id="status-panel">
+      <div class="status-row">
+        <div class="status-label">Players Online</div>
+        <div class="status-val" id="s-players">0</div>
+      </div>
+      <div class="status-row">
+        <div class="status-label">Submitted</div>
+        <div class="status-val" id="s-submitted">—</div>
+      </div>
+      <div id="timer-box" style="display:none;">
+        <div class="action-timer">
+          <div class="timer-val" id="timer-val">—</div>
+          <div class="timer-label">Action Window</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="win-screen">
+  <div class="win-glow">🏆</div>
+  <div class="win-title">Victory!</div>
+  <div class="win-company" id="win-company"></div>
+  <div class="win-vp" id="win-vp"></div>
+  <div class="win-vp-lbl">Victory Points</div>
+  <div class="win-scores" id="win-scores"></div>
+</div>
+
+<div id="disruption-toast">
+  <div class="dt-emoji" id="dt-emoji"></div>
+  <div class="dt-title" id="dt-title"></div>
+  <div class="dt-desc" id="dt-desc"></div>
+</div>
+
+<script>
+const RESOURCE_META = {
+  data:       {label:'Data Capital',      color:'#3b82f6', abbr:'DATA'},
+  human:      {label:'Human Capital',     color:'#f59e0b', abbr:'HUMAN'},
+  compute:    {label:'Compute Credits',   color:'#10b981', abbr:'COMP'},
+  trust:      {label:'Trust Tokens',      color:'#ef4444', abbr:'TRUST'},
+  innovation: {label:'Innovation Points', color:'#a855f7', abbr:'INNOV'},
+  neutral:    {label:'Disruption Zone',   color:'#475569', abbr:'DISRUPT'},
+};
+
+const POSTURE_LABELS = {averse:'🛡️ Averse',balanced:'⚖️ Balanced',optimistic:'⚡ Optimistic',moonshot:'🎲 Moonshot'};
+const NS = 'http://www.w3.org/2000/svg';
+
+let gameState = null;
+let timerInterval = null;
+let lastLogCount = 0;
+
+// Legend
+const lg = document.getElementById('legend-grid');
+Object.entries(RESOURCE_META).filter(([k])=>k!=='neutral').forEach(([k,m])=>{
+  lg.innerHTML += `<div class="legend-item"><div class="legend-hex" style="background:${m.color}30;border:1px solid ${m.color}60"></div><div class="legend-label">${m.label}</div></div>`;
+});
+
+function svgEl(tag,attrs,parent){
+  const el=document.createElementNS(NS,tag);
+  Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v));
+  parent?.appendChild(el); return el;
+}
+
+function hexPointsStr(corners){ return corners.map(c=>`${c.x},${c.y}`).join(' '); }
+
+function miniHexPoints(cx,cy,r){
+  return Array.from({length:6},(_,i)=>{const a=Math.PI/180*(-90+60*i);return `${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`;}).join(' ');
+}
+
+function starPoints(cx,cy,outer,inner,n=6){
+  const pts=[];
+  for(let i=0;i<n*2;i++){
+    const a=Math.PI/180*(-90+180/n*i);
+    const r=i%2===0?outer:inner;
+    pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`);
+  }
+  return pts.join(' ');
+}
+
+// BFS: compute which vertices player pid can place on (distance >= 2 via own edges)
+function computeReachable(pid, s) {
+  const starts = s.verts.filter(v => v.owner===pid).map(v => v.id);
+  if (!starts.length) return new Set();
+  const dist = new Map();
+  const queue = [...starts];
+  starts.forEach(v => dist.set(v, 0));
+  let qi = 0;
+  while (qi < queue.length) {
+    const cur = queue[qi++];
+    const d = dist.get(cur);
+    s.verts[cur].adjEdges.forEach(eid => {
+      const e = s.edges[eid];
+      if (!e || e.owner !== pid) return;
+      const nv = e.v1===cur ? e.v2 : e.v1;
+      if (!dist.has(nv)) { dist.set(nv, d+1); queue.push(nv); }
+    });
+  }
+  return new Set(
+    s.verts.filter(v =>
+      v.owner === null &&
+      dist.has(v.id) && dist.get(v.id) >= 2 &&
+      !v.adjVerts.some(av => s.verts[av] && s.verts[av].owner !== null)
+    ).map(v => v.id)
+  );
+}
+
+function renderBoard(s){
+  const hexL   = document.getElementById('hex-layer');    hexL.innerHTML='';
+  const edgeL  = document.getElementById('edge-layer');   edgeL.innerHTML='';
+  const reachL = document.getElementById('reach-layer');  reachL.innerHTML='';
+  const idL    = document.getElementById('id-layer');     idL.innerHTML='';
+  const vertL  = document.getElementById('vert-layer');   vertL.innerHTML='';
+  const numL   = document.getElementById('number-layer'); numL.innerHTML='';
+  const lblL   = document.getElementById('label-layer');  lblL.innerHTML='';
+
+  const bgL = document.getElementById('bg-hexes'); bgL.innerHTML='';
+  svgEl('rect',{x:0,y:0,width:1000,height:790,fill:'#060c1a'},bgL);
+
+  // ── HEXES ──
+  s.hexes.forEach(h=>{
+    const m=RESOURCE_META[h.resource];
+    const pts=hexPointsStr(h.corners);
+    const isActivated=s.activatedHexes.includes(h.id);
+    svgEl('polygon',{points:pts,fill:'none',stroke:m.color,opacity:'0.08','stroke-width':'1'},hexL);
+    const poly=svgEl('polygon',{points:pts,fill:`url(#rg-${h.resource})`,stroke:m.color,'stroke-width':isActivated?'3':'1.5',opacity:isActivated?'1':'0.9'},hexL);
+    if(isActivated){ poly.setAttribute('filter','url(#glow-soft)'); poly.style.animation='hexPulse 0.8s ease-in-out 3'; }
+    if(h.disrupted){ svgEl('polygon',{points:pts,fill:'rgba(0,0,0,0.5)',stroke:'#ff4455','stroke-width':'2','stroke-dasharray':'6,4'},hexL); }
+    if(isActivated) svgEl('polygon',{points:pts,fill:'url(#rg-activated)'},hexL);
+    const rl=svgEl('text',{x:h.x,y:h.y-8,'text-anchor':'middle','font-family':"'Share Tech Mono',monospace",'font-size':'11','font-weight':'700',fill:m.color,opacity:'0.9'},lblL);
+    rl.textContent=m.abbr;
+    if(h.number>0){
+      const hot=h.number===6||h.number===8;
+      svgEl('circle',{cx:h.x,cy:h.y+18,r:'16',fill:hot?'rgba(255,60,60,0.15)':'rgba(10,25,50,0.9)',stroke:hot?'#ff4455':'#1e3a5a','stroke-width':'1.5'},numL);
+      const nt=svgEl('text',{x:h.x,y:h.y+23,'text-anchor':'middle','font-family':"'Share Tech Mono',monospace",'font-size':'14','font-weight':'700',fill:hot?'#ff8888':'#8ab4d4'},numL);
+      nt.textContent=h.number;
+      if(hot){ for(let d=-1;d<=1;d+=2) svgEl('circle',{cx:h.x+d*5,cy:h.y+34,r:'2',fill:'#ff4455'},numL); }
+    } else if(h.resource==='neutral'){
+      const nt=svgEl('text',{x:h.x,y:h.y+23,'text-anchor':'middle','font-family':"'Share Tech Mono',monospace",'font-size':'16',fill:'#475569'},numL);
+      nt.textContent='⚡';
+    }
+  });
+
+  // ── UNCLAIMED EDGE IDs (visible so players know what to type) ──
+  s.edges.forEach(e=>{
+    if(e.owner) return;
+    const mx=(e.x1+e.x2)/2, my=(e.y1+e.y2)/2;
+    svgEl('rect',{x:mx-11,y:my-7.5,width:22,height:15,rx:'4',fill:'rgba(4,10,25,0.88)',stroke:'#1a304a','stroke-width':'0.8'},idL);
+    const t=svgEl('text',{x:mx,y:my+4.5,'text-anchor':'middle','font-family':"'Share Tech Mono',monospace",'font-size':'9','font-weight':'700',fill:'#3a6a8a'},idL);
+    t.textContent='e'+e.id;
+  });
+
+  // ── CLAIMED EDGES (Pathways) ──
+  s.edges.forEach(e=>{
+    if(!e.owner) return;
+    const p=s.players[e.owner]; if(!p) return;
+    svgEl('line',{x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,stroke:p.color+'44','stroke-width':'10','stroke-linecap':'round'},edgeL);
+    svgEl('line',{x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,stroke:p.color,'stroke-width':'5','stroke-linecap':'round',filter:'url(#glow-soft)'},edgeL);
+    svgEl('line',{x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,stroke:'rgba(255,255,255,0.3)','stroke-width':'2','stroke-linecap':'round'},edgeL);
+  });
+
+  // ── REACHABLE VERTEX INDICATORS (dashed ring per player, shows where they can build next) ──
+  Object.values(s.players).forEach(p=>{
+    const reachable=computeReachable(p.id, s);
+    reachable.forEach(vid=>{
+      const v=s.verts[vid];
+      // Outer glow
+      svgEl('circle',{cx:v.x,cy:v.y,r:'19',fill:p.color+'18',stroke:p.color,
+        'stroke-width':'2','stroke-dasharray':'5,3',opacity:'0.85'},reachL);
+    });
+  });
+
+  // ── UNCLAIMED VERTEX IDs ──
+  s.verts.forEach(v=>{
+    if(v.owner) return;
+    svgEl('circle',{cx:v.x,cy:v.y,r:'11',fill:'rgba(4,10,25,0.9)',stroke:'#1a304a','stroke-width':'1'},idL);
+    const t=svgEl('text',{x:v.x,y:v.y+4,'text-anchor':'middle','font-family':"'Share Tech Mono',monospace",'font-size':'9','font-weight':'700',fill:'#4a8ab4'},idL);
+    t.textContent=v.id;
+  });
+
+  // ── CLAIMED VERTICES (Capability Positions / CoEs) ──
+  s.verts.forEach(v=>{
+    if(!v.owner) return;
+    const p=s.players[v.owner]; if(!p) return;
+    if(v.type==='coe'){
+      svgEl('circle',{cx:v.x,cy:v.y,r:'22',fill:p.color+'22',stroke:'none',filter:'url(#glow-coe)'},vertL);
+      svgEl('polygon',{points:starPoints(v.x,v.y,16,8,6),fill:p.color,stroke:'#ffffff','stroke-width':'1.5',filter:'url(#glow-med)'},vertL);
+      svgEl('polygon',{points:starPoints(v.x,v.y,16,8,6),fill:'rgba(255,255,255,0.25)',stroke:'none'},vertL);
+      svgEl('circle',{cx:v.x,cy:v.y,r:'5',fill:'#fff',opacity:'0.9'},vertL);
+    } else {
+      svgEl('circle',{cx:v.x,cy:v.y,r:'16',fill:p.color+'33',stroke:'none',filter:'url(#glow-soft)'},vertL);
+      svgEl('polygon',{points:miniHexPoints(v.x,v.y,11),fill:p.color,stroke:'#ffffff','stroke-width':'1.5',filter:'url(#glow-soft)'},vertL);
+      svgEl('polygon',{points:miniHexPoints(v.x,v.y,11),fill:'rgba(255,255,255,0.18)',stroke:'none'},vertL);
+    }
+  });
+}
+
+function renderPlayers(s){
+  const container=document.getElementById('players-list');
+  const sorted=Object.values(s.players).sort((a,b)=>b.vp-a.vp);
+  container.innerHTML='';
+  sorted.forEach((p,i)=>{
+    const isLeader=i===0&&p.vp>0;
+    const hasSubmitted=s.submittedCount>0;
+    const card=document.createElement('div');
+    card.className='player-card'+(isLeader?' leader':'');
+    card.innerHTML=`
+      <div class="pc-top">
+        <div class="pc-dot" style="background:${p.color};box-shadow:0 0 8px ${p.color}88"></div>
+        <div class="pc-name">${p.company}</div>
+        <div class="pc-posture">${POSTURE_LABELS[p.posture]||''}</div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div class="pc-vp">${p.vp}<span> / ${s.winVP||10} VP</span></div>
+        ${isLeader?'<span style="font-size:10px;color:var(--amber);font-weight:700">👑 LEADING</span>':''}
+      </div>
+      <div class="vp-bar-wrap"><div class="vp-bar" style="width:${Math.min(100,(p.vp/(s.winVP||10))*100)}%;background:linear-gradient(90deg,${p.color},${p.color}88)"></div></div>
+      <div class="pc-res">
+        ${['data','human','compute','trust','innovation'].map(r=>`
+          <div class="pc-res-item">
+            <div class="res-dot" style="background:${RESOURCE_META[r].color}"></div>
+            <span style="color:${RESOURCE_META[r].color}">${p.resources[r]||0}</span>
+          </div>`).join('')}
+        ${p.cards.length?`<div class="pc-res-item" style="color:var(--amber)">🃏 ${p.cards.length}</div>`:''}
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderLog(s){
+  const container=document.getElementById('log-list');
+  if(s.log.length===lastLogCount) return;
+  lastLogCount=s.log.length;
+  container.innerHTML='';
+  [...s.log].reverse().forEach((entry,i)=>{
+    const d=new Date(entry.t);
+    const time=`${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    const el=document.createElement('div');
+    el.className='log-entry'+(i===0?' new':'');
+    el.innerHTML=`<span class="log-time">${time}</span>${entry.msg}`;
+    container.appendChild(el);
+  });
+}
+
+function updateHeader(s){
+  const round=document.getElementById('round-badge');
+  const phase=document.getElementById('phase-badge');
+  const pc=document.getElementById('player-count');
+  if(s.phase==='lobby'){ round.textContent='LOBBY'; phase.textContent='WAITING'; }
+  else if(s.phase==='playing'){ round.textContent=`ROUND ${s.round}`; phase.textContent='IN PROGRESS'; }
+  else if(s.phase==='game-over'){ round.textContent='GAME OVER'; phase.textContent='COMPLETE'; }
+  pc.textContent=`${s.playerCount} COMPAN${s.playerCount===1?'Y':'IES'}`;
+  document.getElementById('s-players').textContent=s.playerCount;
+  const sub=s.actionOpen?`${s.submittedCount} / ${s.playerCount}`:'—';
+  document.getElementById('s-submitted').textContent=sub;
+}
+
+function updateDice(s){
+  if(!s.diceResult){ document.getElementById('dice-result').textContent='—'; return; }
+  document.getElementById('die1').textContent=s.dice[0]||'?';
+  document.getElementById('die2').textContent=s.dice[1]||'?';
+  document.getElementById('dice-result').textContent=s.diceResult;
+  const cnt=s.activatedHexes?.length||0;
+  document.getElementById('dice-activated').textContent=cnt?`${cnt} hex${cnt>1?'es':''} activated`:'';
+}
+
+function updateTimer(s){
+  const box=document.getElementById('timer-box');
+  if(!s.actionOpen||!s.actionEnd){ box.style.display='none'; clearInterval(timerInterval); return; }
+  box.style.display='block';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{
+    const rem=Math.max(0,Math.ceil((s.actionEnd-Date.now())/1000));
+    document.getElementById('timer-val').textContent=rem;
+    document.getElementById('timer-val').style.color=rem<15?'#ff4455':rem<30?'#ff9500':'var(--amber)';
+    if(rem===0) clearInterval(timerInterval);
+  },500);
+}
+
+function onState(s){
+  gameState=s;
+  renderBoard(s);
+  renderPlayers(s);
+  renderLog(s);
+  updateHeader(s);
+  updateDice(s);
+  updateTimer(s);
+}
+
+const socket=io({query:{role:'viewer'}});
+socket.on('state',onState);
+
+socket.on('dice_rolled',({dice,result})=>{
+  const d1=document.getElementById('die1'),d2=document.getElementById('die2');
+  d1.classList.add('rolling'); d2.classList.add('rolling');
+  let count=0;
+  const iv=setInterval(()=>{
+    d1.textContent=Math.ceil(Math.random()*6); d2.textContent=Math.ceil(Math.random()*6); count++;
+    if(count>8){ clearInterval(iv); d1.textContent=dice[0]; d2.textContent=dice[1]; d1.classList.remove('rolling'); d2.classList.add('active'); d2.classList.remove('rolling'); d1.classList.add('active'); }
+  },80);
+});
+
+socket.on('disruption',({card})=>{
+  const t=document.getElementById('disruption-toast');
+  document.getElementById('dt-emoji').textContent=card.emoji;
+  document.getElementById('dt-title').textContent=card.name;
+  document.getElementById('dt-desc').textContent=card.desc;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),4000);
+});
+
+socket.on('game_over',({winner,players})=>{
+  document.getElementById('win-company').textContent=winner.company;
+  document.getElementById('win-vp').textContent=winner.vp;
+  const sc=document.getElementById('win-scores');
+  sc.innerHTML='';
+  [...players].sort((a,b)=>b.vp-a.vp).forEach(p=>{
+    sc.innerHTML+=`<div class="win-score-row"><div class="win-score-dot" style="background:${p.color}"></div><div class="win-score-name">${p.company}</div><div class="win-score-vp">${p.vp} VP</div></div>`;
+  });
+  document.getElementById('win-screen').classList.add('show');
+});
+
+socket.on('reset',()=>{ document.getElementById('win-screen').classList.remove('show'); lastLogCount=0; });
+</script>
+
+<style>
+@keyframes hexPulse { 0%,100%{opacity:0.9} 50%{opacity:1} }
+</style>
+</body>
+</html>
